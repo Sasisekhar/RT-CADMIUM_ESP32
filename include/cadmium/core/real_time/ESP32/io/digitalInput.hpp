@@ -1,6 +1,7 @@
 /**
-* Jon Menard
+* Sasisekhar Mangalam Govind
 * ARSLab - Carleton University
+* SENSE  - VIT Chennai
 *
 * Digital Input:
 * Model to interface with a digital Input pin for Embedded Cadmium.
@@ -13,7 +14,7 @@
 	#include <iostream>
 #endif
 #include <optional>
-#include <cadmium/core/modeling/atomic.hpp>
+#include "../../../modeling/atomic.hpp"
 
 #include <limits>
 #include <math.h> 
@@ -30,10 +31,10 @@
 #include <limits>
 #include <random>
 
-#ifdef RT_ARM_MBED
+#ifdef RT_ESP32
+  #include "driver/gpio.h"
 #endif
 
-#include "../mbed.h"
 using namespace std;
 
 namespace cadmium {
@@ -70,21 +71,23 @@ namespace cadmium {
       
         Port<bool> out;
         //Parameters to be overwriten when instantiating the atomic model
-        DigitalIn* digiPin;
+        gpio_num_t digiPin;
         double   pollingRate;
         // default constructor
-        DigitalInput(const std::string& id, PinName pin): Atomic<DigitalInputState>(id, DigitalInputState())  {
+        DigitalInput(const std::string& id, int pin): Atomic<DigitalInputState>(id, DigitalInputState())  {
           out = addOutPort<bool>("out");
-          digiPin = new DigitalIn(pin);
+          digiPin = (gpio_num_t) pin;
+          gpio_reset_pin(digiPin);
+          gpio_set_direction(digiPin, GPIO_MODE_INPUT);
           pollingRate = 0.10; 
-          state.output = digiPin->read();
+          state.output = gpio_get_level(digiPin);
           state.last = state.output;
         };
       
       // internal transition
       void internalTransition(DigitalInputState& state) const override {
         state.last = state.output;
-        state.output = digiPin->read() == 1;
+        state.output = gpio_get_level(digiPin);
         state.sigma = pollingRate;
       }
 

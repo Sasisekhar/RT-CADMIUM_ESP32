@@ -1,6 +1,7 @@
 /**
-* Jon Menard
+* Sasisekhar Mangalam Govind
 * ARSLab - Carleton University
+* SENSE  - VIT Chennai
 *
 * Digital Output:
 * Model to interface with a digital Output pin for Embedded Cadmium.
@@ -13,7 +14,7 @@
 	#include <iostream>
 #endif
 #include <optional>
-#include <cadmium/core/modeling/atomic.hpp>
+#include "../../../modeling/atomic.hpp"
 
 #include <limits>
 #include <math.h> 
@@ -29,7 +30,10 @@
 #include <algorithm>
 #include <limits>
 #include <random>
-#include "../mbed.h"
+
+#ifdef RT_ESP32
+  #include "driver/gpio.h"
+#endif
 
 
 using namespace std;
@@ -66,12 +70,14 @@ namespace cadmium {
       
         Port<bool> in;
         //Parameters to be overwriten when instantiating the atomic model
-        DigitalOut* digiPin;
+        gpio_num_t digiPin;
 
         // default constructor
-        DigitalOutput(const std::string& id, PinName pin): Atomic<DigitalOutputState>(id, DigitalOutputState())  {
+        DigitalOutput(const std::string& id, int pin): Atomic<DigitalOutputState>(id, DigitalOutputState())  {
           in = addInPort<bool>("in");
-          digiPin = new DigitalOut(pin);
+          digiPin = (gpio_num_t) pin;
+          gpio_reset_pin(digiPin);
+          gpio_set_direction(digiPin, GPIO_MODE_OUTPUT);
         };
       
       // internal transition
@@ -85,7 +91,7 @@ namespace cadmium {
 					  state.output = x;
 				  }
 
-          digiPin->write(state.output ? 1 : 0);
+          gpio_set_level(digiPin, state.output ? true : false);
 			  }
       }
       

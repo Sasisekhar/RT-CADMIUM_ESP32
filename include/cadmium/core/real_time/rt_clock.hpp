@@ -1,6 +1,8 @@
 /**
- * Copyright (C) 2022  Jon Menard
+ * Custom Clock generator for ESP32
+ * Copyright (C) 2022  Sasisekhar MG
  * ARSLab - Carleton University
+ * SENSE  - VIT Chennai
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,17 +38,14 @@
 #endif
 #include "../exception.hpp"
 #include "linux/asynchronous_events.hpp"
-// #include "./asynchronous_atomic.hpp"
+
 extern "C" {
 
-  static long MIN_TO_MICRO   = (1000*1000*60);
   static long SEC_TO_MICRO   = (1000*1000);
-  static long MILI_TO_MICRO  = (1000);
 
   #ifndef MISSED_DEADLINE_TOLERANCE
     #define MISSED_DEADLINE_TOLERANCE 8000
   #endif
-  // extern volatile bool interrupted;
   
   namespace cadmium {
           #ifdef RT_ESP32
@@ -54,7 +53,6 @@ extern "C" {
           class RTClock : public AsyncEventObserver {
           private:
 
-            
             //Time since last time advance, how long the simulator took to advance
             gptimer_handle_t executionTimer;
             gptimer_handle_t timeoutTimer;
@@ -85,23 +83,10 @@ extern "C" {
               gptimer_set_raw_count(executionTimer, 0);
               gptimer_start(executionTimer);
 
-              //Handle waits of over ~35 minutes as timer overflows
-              // while ((timeLeft > (35 * 60 * 1000 * 1000)) && !interrupted) {
-              //   this->expired = false;
-              //   this->_timeout.attach_us(callback(this, &RTClock::timeout_expired), INT_MAX);
-
-              //   while (!expired && !interrupted) sleep();
-
-              //   if(!interrupted){
-              //     timeLeft -= INT_MAX;
-              //   }
-              // }
-
-              //Handle waits of under INT_MAX microseconds
-              if(!interrupted && timeLeft > 0) {
+              if(!interrupted && timeLeft > 0) {          //Not tested for wait times over INT_MAX
                 gptimer_disable(timeoutTimer);
                 gptimer_alarm_config_t alarm_config = {
-                    .alarm_count = (uint64_t) timeLeft,
+                  .alarm_count = (uint64_t) timeLeft,
                 };
                 ESP_ERROR_CHECK(gptimer_set_alarm_action(timeoutTimer, &alarm_config));
                 ESP_ERROR_CHECK(gptimer_enable(timeoutTimer));
@@ -121,8 +106,6 @@ extern "C" {
                 timeLeft = 0;
                 gptimer_get_raw_count(executionTimer, &timeLeft);
                 if(delay_us < timeLeft ) return 0;
-                //hal_critical_section_enter();
-                // interrupted = false;
                 return delay_us - timeLeft;
               }
               return 0;
@@ -173,7 +156,10 @@ extern "C" {
 
               //If negative time, halt and print error over UART
               if(t < 0){
-                throw CadmiumSimulationException("Time is negative - rt_clock.hpp");
+                ESP_LOGE(TAG, "Time is negative - rt_clock.hpp");
+                while (true) {
+                  vTaskDelay(1000/portTICK_PERIOD_MS);
+                }
               }
 
               //Wait forever
@@ -195,15 +181,15 @@ extern "C" {
               if (MISSED_DEADLINE_TOLERANCE != -1 ) {
                 if (actual_delay >= -MISSED_DEADLINE_TOLERANCE) {
                   if(actual_delay < 0){
-                    ESP_LOGW("RT_CLOCK.hpp", "Slip by: %d us", actual_delay);
+                    ESP_LOGW(TAG, "Slip by: %d us", actual_delay);
                   }
                   actual_delay = set_timeout(actual_delay);
                 } else {
                   //Missed Real Time Deadline and could not recover (Slip is passed the threshold)
-  #ifndef NO_LOGGING
-      std::cout << "MISSED SCHEDULED TIME ADVANCE DEADLINE BY:" << -actual_delay << " microseconds \n";
-  #endif
-                  throw CadmiumSimulationException("MISSED SCHEDULED TIME ADVANCE DEADLINE - rt_clock.hpp");
+                  ESP_LOGE(TAG, "MISSED SCHEDULED TIME ADVANCE DEADLINE BY: %d us\n", -actual_delay);
+                  while (true) {
+                    vTaskDelay(1000/portTICK_PERIOD_MS);
+                  }
                 }
               }
 
